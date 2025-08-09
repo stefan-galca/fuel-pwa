@@ -64,112 +64,84 @@ th{background:#19c37d;color:#fff}
 </div>
 </main>
 
-<!-- Librării pentru PDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-
 <script>
+// ===== Utils & storage =====
 const KEY='gse_fuel_entries';
 const el=id=>document.getElementById(id);
-
-function nowISO(){
-  const d=new Date();
-  return {iso:d.toISOString(),date:d.toLocaleDateString('ro-RO'),time:d.toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'})};
-}
-function normalizeNumber(s){
-  if(typeof s==='number')return s;
-  if(!s)return NaN;
-  let t=(''+s).replace(/[^0-9.,-]/g,'');
-  if(t.includes(',')&&!t.includes('.'))t=t.replace(',','.');
-  if((t.match(/[,\.]/g)||[]).length>1)t=t.replace(/[,.]/g,'');
-  return parseFloat(t);
-}
+function nowISO(){const d=new Date();return{iso:d.toISOString(),date:d.toLocaleDateString('ro-RO'),time:d.toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'})};}
+function normalizeNumber(s){if(typeof s==='number')return s;if(!s)return NaN;let t=(''+s).replace(/[^0-9.,-]/g,'');if(t.includes(',')&&!t.includes('.'))t=t.replace(',','.');if((t.match(/[,\.]/g)||[]).length>1)t=t.replace(/[,.]/g,'');return parseFloat(t);}
 function load(){return JSON.parse(localStorage.getItem(KEY)||'[]');}
 function save(a){localStorage.setItem(KEY,JSON.stringify(a));}
 function fmt(n,d=2){return(n==null||isNaN(n))?'':Number(n).toFixed(d);}
 function computeRow(data,idx){
-  const item=data[idx];
-  let prevIndex=-1;
-  for(let i=idx-1;i>=0;i--) if(data[i].full_tank){ prevIndex=i; break; }
-  const prevOdo=prevIndex>=0?data[prevIndex].odometer:null;
-  const km=(prevOdo!=null)?(item.odometer-prevOdo):null;
-  const cons=(km&&km>0)?(item.liters/km*100):null;
-  return {cons};
+  const it=data[idx]; let prev=-1; for(let i=idx-1;i>=0;i--) if(data[i].full_tank){prev=i;break;}
+  const prevOdo=prev>=0?data[prev].odometer:null; const km=(prevOdo!=null)?(it.odometer-prevOdo):null;
+  const cons=(km&&km>0)?(it.liters/km*100):null; return {cons};
 }
-
 function refresh(){
   const data=load().sort((a,b)=>a.odometer-b.odometer);
-  const tb=el('rows');tb.innerHTML='';
-  let totalFuel=0,totalCost=0,totalKm=0,lastFull=null;
+  const tb=el('rows');tb.innerHTML=''; let totalFuel=0,totalCost=0,totalKm=0,lastFull=null;
   data.forEach((it,i)=>{
-    const r=computeRow(data,i);
-    totalFuel+=it.liters||0;
-    if(it.total_cost) totalCost+=it.total_cost;
+    const r=computeRow(data,i); totalFuel+=it.liters||0; if(it.total_cost) totalCost+=it.total_cost;
     if(it.full_tank){ if(lastFull!=null && it.odometer>lastFull) totalKm+=(it.odometer-lastFull); lastFull=it.odometer; }
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${it.date}</td><td>${it.time}</td><td>${it.odometer}</td><td>${fmt(it.liters,2)}</td><td>${fmt(it.total_cost,2)}</td><td>${it.full_tank?'✔':''}</td><td>${fmt(r.cons,2)}</td>`;
     tb.appendChild(tr);
   });
   const avg=totalKm>0?(totalFuel/totalKm*100):null;
-  el('statFuel').textContent=`${fmt(totalFuel,2)} L`;
-  el('statCost').textContent=`${fmt(totalCost,2)} €`;
-  el('statL100').textContent=`${avg?fmt(avg,2):'—'} L/100 km`;
-  const n=nowISO();el('nowStamp').textContent=`${n.date} ${n.time}`;
+  el('statFuel').textContent=`${fmt(totalFuel,2)} L`; el('statCost').textContent=`${fmt(totalCost,2)} €`; el('statL100').textContent=`${avg?fmt(avg,2):'—'} L/100 km`;
+  const n=nowISO(); el('nowStamp').textContent=`${n.date} ${n.time}`;
 }
 
+// ===== Actions =====
 el('addBtn').addEventListener('click',()=>{
   const odo=normalizeNumber(el('odometer').value);
   const lit=normalizeNumber(el('liters').value);
   const total=normalizeNumber(el('total_cost').value);
   const full=el('full_tank').checked;
   if(isNaN(odo)||isNaN(lit)){ alert('Completează Odometer și Litri.'); return; }
-  const ts=nowISO();
-  const arr=load();
+  const ts=nowISO(); const arr=load();
   arr.push({timestamp:ts.iso,date:ts.date,time:ts.time,odometer:odo,liters:lit,total_cost:total,full_tank:full});
   save(arr);
-  ['odometer','liters','total_cost'].forEach(id=>el(id).value='');
-  el('full_tank').checked=false;
-  refresh();
+  ['odometer','liters','total_cost'].forEach(id=>el(id).value=''); el('full_tank').checked=false; refresh();
 });
 
 el('resetBtn').addEventListener('click',()=>{
-  if(confirm('Ștergi toate înregistrările?')){
-    localStorage.removeItem(KEY);
-    refresh();
-  }
+  if(confirm('Ștergi toate înregistrările?')){ localStorage.removeItem(KEY); refresh(); }
 });
 
-el('exportPdfBtn').addEventListener('click',()=>{
-  const val=el('monthPicker').value;
-  if(!val){ alert('Alege o lună.'); return; }
-  if(!window.jspdf){ alert('Nu pot încărca modulul PDF.'); return; }
-  const { jsPDF } = window.jspdf;
-  const [yy,mm]=val.split('-').map(x=>parseInt(x,10));
-  const rows=load().filter(r=>{
-    const d=new Date(r.timestamp);
-    return d.getFullYear()===yy && (d.getMonth()+1)===mm;
-  });
-  if(!rows.length){ alert('Nu sunt date.'); return; }
-  let totL=0, totE=0;
-  rows.forEach(r=>{ totL += (r.liters||0); if(r.total_cost) totE += r.total_cost; });
-  const doc=new jsPDF();
-  doc.setFontSize(14); doc.text(`GSE International — Alimentări ${mm}/${yy}`, 14, 16);
-  const body=rows.map(r=>[r.date,r.time,r.odometer,r.liters,r.total_cost,r.full_tank?'✔':'']);
-  doc.autoTable({ head:[['Data','Ora','Odo','Litri','Cost €','Plin']], body, startY:22, styles:{fontSize:9} });
-  const y=doc.autoTable.previous.finalY+8;
-  doc.setFontSize(12); doc.text(`Total litri: ${totL.toFixed(2)}    Total cost: ${totE.toFixed(2)} €`, 14, y);
-  
-  try {
-    doc.save(`alimentari_${yy}-${String(mm).padStart(2,'0')}.pdf`);
-  } catch(e) {
-    const blob = doc.output('blob');
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-  }
+// ===== PDF loader cu fallback =====
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.async=true;s.crossOrigin='anonymous';s.onload=res;s.onerror=()=>rej(new Error('load fail: '+src));document.head.appendChild(s);});}
+async function ensureJsPDF(){
+  if (window.jspdf?.jsPDF?.API?.autoTable) return;
+  try{ if(!window.jspdf) await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'); }
+  catch{ await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js'); }
+  try{ if(!window.jspdf?.jsPDF?.API?.autoTable) await loadScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'); }
+  catch{ await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'); }
+  if(!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF n-a pornit');
+}
+
+el('exportPdfBtn').addEventListener('click', async ()=>{
+  const val=el('monthPicker').value; if(!val){ alert('Alege o lună.'); return; }
+  try{
+    await ensureJsPDF(); const { jsPDF } = window.jspdf;
+    const [yy,mm]=val.split('-').map(x=>parseInt(x,10));
+    const rows=load().filter(r=>{const d=new Date(r.timestamp);return d.getFullYear()===yy && (d.getMonth()+1)===mm;});
+    if(!rows.length){ alert('Nu sunt date.'); return; }
+    let totL=0, totE=0; rows.forEach(r=>{ totL+=(r.liters||0); if(r.total_cost) totE+=r.total_cost; });
+    const doc=new jsPDF(); doc.setFontSize(14); doc.text(`GSE International — Alimentări ${mm}/${yy}`,14,16);
+    const body=rows.map(r=>[r.date,r.time,r.odometer,r.liters,r.total_cost,r.full_tank?'✔':'']);
+    doc.autoTable({ head:[['Data','Ora','Odo','Litri','Cost €','Plin']], body, startY:22, styles:{fontSize:9} });
+    const y=doc.autoTable.previous.finalY+8; doc.setFontSize(12); doc.text(`Total litri: ${totL.toFixed(2)}    Total cost: ${totE.toFixed(2)} €`,14,y);
+    try{ doc.save(`alimentari_${yy}-${String(mm).padStart(2,'0')}.pdf`); }
+    catch{ const blob=doc.output('blob'); const url=URL.createObjectURL(blob); window.open(url,'_blank'); }
+  }catch(e){ console.error(e); alert('Nu pot genera PDF-ul (internet sau cache). Încearcă din nou.'); }
 });
 
-setInterval(()=>{ const n=nowISO(); el('nowStamp').textContent=`${n.date} ${n.time}`; }, 1000);
+// ===== PWA SW =====
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js'); }); }
+
+// init
 refresh();
 </script>
 </body>
