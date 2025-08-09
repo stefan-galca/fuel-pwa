@@ -160,8 +160,14 @@ el('exportPdfBtn').addEventListener('click',()=>{
   doc.autoTable({ head:[['Data','Ora','Odo','Litri','Cost €','Plin']], body, startY:22, styles:{fontSize:9} });
   const y=doc.autoTable.previous.finalY+8;
   doc.setFontSize(12); doc.text(`Total litri: ${totL.toFixed(2)}    Total cost: ${totE.toFixed(2)} €`, 14, y);
-  doc.save(`alimentari_${yy}-${String(mm).padStart(2,'0')}.pdf`);
-});
+  try {
+    doc.save(`alimentari_${yy}-${String(mm).padStart(2,'0')}.pdf`);
+} catch(e) {
+    // fallback pentru iPhone PWA
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+}
 
 setInterval(()=>{ const n=nowISO(); el('nowStamp').textContent=`${n.date} ${n.time}`; }, 1000);
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js'); }); }
