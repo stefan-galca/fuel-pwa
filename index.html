@@ -1,25 +1,107 @@
-// sw.js — v3 (force update)
-const CACHE = 'fuel-pwa-v3';
-const ASSETS = [
-  './',
-  './index.html',
-  './manifest.webmanifest',
-  './icons/icon-192.png',
-  './icons/icon-512.png'
-];
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Consum & €/km</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#19c37d">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+    header { background: #19c37d; padding: 10px; color: white; text-align: center; }
+    main { padding: 15px; max-width: 600px; margin: auto; background: white; }
+    input, button { width: 100%; padding: 8px; margin: 5px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
+    th { background: #19c37d; color: white; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Consum & €/km</h1>
+  </header>
+  <main>
+    <label>Odometer (km): <input type="text" id="odometer" inputmode="decimal"></label>
+    <label>Litri: <input type="text" id="liters" inputmode="decimal"></label>
+    <label>Preț/L (€): <input type="text" id="price_per_liter" inputmode="decimal"></label>
+    <label>Cost total (€): <input type="text" id="total_cost" inputmode="decimal"></label>
+    <label>Plin-plin? <input type="checkbox" id="full_tank"></label>
+    <label>Factura (poză sau PDF): <input type="file" id="invoice" accept="image/*,application/pdf"></label>
+    <button id="addBtn">Adaugă</button>
+    <table>
+      <thead>
+        <tr>
+          <th>Odo</th>
+          <th>Litri</th>
+          <th>€/L</th>
+          <th>Cost</th>
+          <th>Plin</th>
+          <th>L/100km</th>
+          <th>€/km</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </main>
+<script>
+const KEY = "fuel_data_v2";
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
+function normalizeNumber(s) {
+  if (typeof s === "number") return s;
+  if (!s) return NaN;
+  let t = ("" + s).replace(/[^0-9.,-]/g, "");
+  if (t.includes(",") && !t.includes(".")) t = t.replace(",", ".");
+  if ((t.match(/[,\.]/g) || []).length > 1) t = t.replace(/[,.]/g, "");
+  return parseFloat(t);
+}
+
+function loadData() {
+  return JSON.parse(localStorage.getItem(KEY) || "[]");
+}
+
+function saveData(data) {
+  localStorage.setItem(KEY, JSON.stringify(data));
+}
+
+document.getElementById("addBtn").addEventListener("click", () => {
+  let odo = normalizeNumber(document.getElementById("odometer").value);
+  let liters = normalizeNumber(document.getElementById("liters").value);
+  let price = normalizeNumber(document.getElementById("price_per_liter").value);
+  let total = normalizeNumber(document.getElementById("total_cost").value);
+  let full = document.getElementById("full_tank").checked;
+
+  if (!price && total && liters) price = total / liters;
+  if (!total && price && liters) total = price * liters;
+
+  let data = loadData();
+  let prev = data.length ? data[data.length - 1] : null;
+  let km = prev && full ? odo - prev.odo : null;
+  let l100 = km && liters ? (liters / km * 100) : null;
+  let costKm = km && total ? (total / km) : null;
+
+  data.push({ odo, liters, price, total, full, l100, costKm });
+  saveData(data);
+  renderTable();
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-});
+function renderTable() {
+  let data = loadData();
+  let html = "";
+  data.forEach(r => {
+    html += `<tr>
+      <td>${r.odo}</td>
+      <td>${r.liters}</td>
+      <td>${r.price?.toFixed(2) || ""}</td>
+      <td>${r.total?.toFixed(2) || ""}</td>
+      <td>${r.full ? "✔" : ""}</td>
+      <td>${r.l100 ? r.l100.toFixed(2) : ""}</td>
+      <td>${r.costKm ? r.costKm.toFixed(3) : ""}</td>
+    </tr>`;
+  });
+  document.getElementById("tableBody").innerHTML = html;
+}
 
-self.addEventListener('fetch', (e) => {
-  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
-});
+renderTable();
+</script>
+</body>
+</html>
