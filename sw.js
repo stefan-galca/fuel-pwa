@@ -1,5 +1,5 @@
-// sw.js — v12 (root icons)
-const CACHE = 'gse-fuel-pwa-v12';
+// sw.js — v13 (root icons)
+const CACHE = 'gse-fuel-pwa-v13';
 const ASSETS = [
   './',
   './index.html',
