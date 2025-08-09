@@ -19,8 +19,6 @@ table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.95rem}
 th,td{border:1px solid #e5e7eb;padding:8px;text-align:center}
 th{background:#19c37d;color:#fff}
 .pill{display:inline-block;background:#ecfdf5;border:1px solid #19c37d;color:#065f46;border-radius:999px;padding:3px 8px;margin-right:6px}
-.muted{color:#6b7280;font-size:.9rem}
-.inline-btn{padding:10px;border:1px solid #d1d5db;background:#fff;border-radius:10px;cursor:pointer}
 .danger{border-color:#ef4444;color:#ef4444}
 </style>
 </head>
@@ -41,12 +39,12 @@ th{background:#19c37d;color:#fff}
 
   <div class="row" style="margin-top:8px">
     <button id="addBtn">Adaugă</button>
-    <button id="resetBtn" class="inline-btn danger">Resetează tot</button>
+    <button id="resetBtn" class="danger">Resetează tot</button>
   </div>
 
   <div class="row" style="margin-top:8px">
     <div><label>Lună pentru export PDF<input type="month" id="monthPicker"></label></div>
-    <div style="align-self:end"><button id="exportPdfBtn" class="inline-btn">Export PDF</button></div>
+    <div style="align-self:end"><button id="exportPdfBtn">Export PDF</button></div>
   </div>
 </div>
 
@@ -160,14 +158,15 @@ el('exportPdfBtn').addEventListener('click',()=>{
   doc.autoTable({ head:[['Data','Ora','Odo','Litri','Cost €','Plin']], body, startY:22, styles:{fontSize:9} });
   const y=doc.autoTable.previous.finalY+8;
   doc.setFontSize(12); doc.text(`Total litri: ${totL.toFixed(2)}    Total cost: ${totE.toFixed(2)} €`, 14, y);
+  
   try {
     doc.save(`alimentari_${yy}-${String(mm).padStart(2,'0')}.pdf`);
-} catch(e) {
-    // fallback pentru iPhone PWA
+  } catch(e) {
     const blob = doc.output('blob');
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
-}
+  }
+});
 
 setInterval(()=>{ const n=nowISO(); el('nowStamp').textContent=`${n.date} ${n.time}`; }, 1000);
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js'); }); }
