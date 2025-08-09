@@ -39,6 +39,7 @@ th{background:#19c37d;color:#fff}
 
   <div class="row" style="margin-top:8px">
     <button id="addBtn">Adaugă</button>
+    <button id="deleteLastBtn">Șterge ultima</button>
     <button id="resetBtn" class="danger">Resetează tot</button>
   </div>
 
@@ -73,23 +74,34 @@ function normalizeNumber(s){if(typeof s==='number')return s;if(!s)return NaN;let
 function load(){return JSON.parse(localStorage.getItem(KEY)||'[]');}
 function save(a){localStorage.setItem(KEY,JSON.stringify(a));}
 function fmt(n,d=2){return(n==null||isNaN(n))?'':Number(n).toFixed(d);}
+
+// consum calculat între plinuri (folosește ultimul rând cu full_tank dinaintea celui curent)
 function computeRow(data,idx){
   const it=data[idx]; let prev=-1; for(let i=idx-1;i>=0;i--) if(data[i].full_tank){prev=i;break;}
-  const prevOdo=prev>=0?data[prev].odometer:null; const km=(prevOdo!=null)?(it.odometer-prevOdo):null;
-  const cons=(km&&km>0)?(it.liters/km*100):null; return {cons};
+  const prevOdo=prev>=0?data[prev].odometer:null;
+  const km=(prevOdo!=null)?(it.odometer-prevOdo):null;
+  const cons=(km&&km>0)?(it.liters/km*100):null;
+  return {cons};
 }
+
+// UI refresh
 function refresh(){
   const data=load().sort((a,b)=>a.odometer-b.odometer);
-  const tb=el('rows');tb.innerHTML=''; let totalFuel=0,totalCost=0,totalKm=0,lastFull=null;
+  const tb=el('rows');tb.innerHTML='';
+  let totalFuel=0,totalCost=0,totalKm=0,lastFull=null;
   data.forEach((it,i)=>{
-    const r=computeRow(data,i); totalFuel+=it.liters||0; if(it.total_cost) totalCost+=it.total_cost;
+    const r=computeRow(data,i);
+    totalFuel+=it.liters||0;
+    if(it.total_cost) totalCost+=it.total_cost;
     if(it.full_tank){ if(lastFull!=null && it.odometer>lastFull) totalKm+=(it.odometer-lastFull); lastFull=it.odometer; }
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${it.date}</td><td>${it.time}</td><td>${it.odometer}</td><td>${fmt(it.liters,2)}</td><td>${fmt(it.total_cost,2)}</td><td>${it.full_tank?'✔':''}</td><td>${fmt(r.cons,2)}</td>`;
     tb.appendChild(tr);
   });
   const avg=totalKm>0?(totalFuel/totalKm*100):null;
-  el('statFuel').textContent=`${fmt(totalFuel,2)} L`; el('statCost').textContent=`${fmt(totalCost,2)} €`; el('statL100').textContent=`${avg?fmt(avg,2):'—'} L/100 km`;
+  el('statFuel').textContent=`${fmt(totalFuel,2)} L`;
+  el('statCost').textContent=`${fmt(totalCost,2)} €`;
+  el('statL100').textContent=`${avg?fmt(avg,2):'—'} L/100 km`;
   const n=nowISO(); el('nowStamp').textContent=`${n.date} ${n.time}`;
 }
 
@@ -106,11 +118,25 @@ el('addBtn').addEventListener('click',()=>{
   ['odometer','liters','total_cost'].forEach(id=>el(id).value=''); el('full_tank').checked=false; refresh();
 });
 
-el('resetBtn').addEventListener('click',()=>{
-  if(confirm('Ștergi toate înregistrările?')){ localStorage.removeItem(KEY); refresh(); }
+// Șterge ultima înregistrare (ultima adăugată)
+el('deleteLastBtn').addEventListener('click',()=>{
+  const arr=load();
+  if(!arr.length){ alert('Nu există înregistrări.'); return; }
+  if(confirm('Ștergi ultima înregistrare adăugată?')){
+    arr.pop(); // ultima adăugată
+    save(arr); refresh();
+  }
 });
 
-// ===== PDF loader cu fallback =====
+// Reset total
+el('resetBtn').addEventListener('click',()=>{
+  if(confirm('Ștergi toate înregistrările?')){
+    localStorage.removeItem(KEY);
+    refresh();
+  }
+});
+
+// ===== PDF loader cu fallback (2 CDN-uri) =====
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.async=true;s.crossOrigin='anonymous';s.onload=res;s.onerror=()=>rej(new Error('load fail: '+src));document.head.appendChild(s);});}
 async function ensureJsPDF(){
   if (window.jspdf?.jsPDF?.API?.autoTable) return;
@@ -121,27 +147,44 @@ async function ensureJsPDF(){
   if(!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF n-a pornit');
 }
 
+// Export PDF (include L/100 km în tabel)
 el('exportPdfBtn').addEventListener('click', async ()=>{
   const val=el('monthPicker').value; if(!val){ alert('Alege o lună.'); return; }
   try{
     await ensureJsPDF(); const { jsPDF } = window.jspdf;
     const [yy,mm]=val.split('-').map(x=>parseInt(x,10));
-    const rows=load().filter(r=>{const d=new Date(r.timestamp);return d.getFullYear()===yy && (d.getMonth()+1)===mm;});
-    if(!rows.length){ alert('Nu sunt date.'); return; }
-    let totL=0, totE=0; rows.forEach(r=>{ totL+=(r.liters||0); if(r.total_cost) totE+=r.total_cost; });
-    const doc=new jsPDF(); doc.setFontSize(14); doc.text(`GSE International — Alimentări ${mm}/${yy}`,14,16);
-    const body=rows.map(r=>[r.date,r.time,r.odometer,r.liters,r.total_cost,r.full_tank?'✔':'']);
-    doc.autoTable({ head:[['Data','Ora','Odo','Litri','Cost €','Plin']], body, startY:22, styles:{fontSize:9} });
-    const y=doc.autoTable.previous.finalY+8; doc.setFontSize(12); doc.text(`Total litri: ${totL.toFixed(2)}    Total cost: ${totE.toFixed(2)} €`,14,y);
+    const all=load();
+    // Sortăm tot setul pentru calcul corect al consumului, apoi selectăm din lună
+    const sorted=[...all].sort((a,b)=>a.odometer-b.odometer);
+    const rowsIdx = sorted.map((r,i)=>({r,i})).filter(({r})=>{
+      const d=new Date(r.timestamp); return d.getFullYear()===yy && (d.getMonth()+1)===mm;
+    });
+    if(!rowsIdx.length){ alert('Nu sunt date.'); return; }
+
+    let totL=0, totE=0;
+    const body = rowsIdx.map(({r,i})=>{
+      const cons = computeRow(sorted,i).cons;
+      totL += (r.liters||0); if(r.total_cost) totE += r.total_cost;
+      return [r.date, r.time, r.odometer, r.liters, r.total_cost ?? '', r.full_tank?'✔':'', cons?Number(cons).toFixed(2):''];
+    });
+
+    const doc=new jsPDF();
+    doc.setFontSize(14); doc.text(`GSE International — Alimentări ${mm}/${yy}`,14,16);
+    doc.autoTable({ head:[['Data','Ora','Odo','Litri','Cost €','Plin','L/100 km']], body, startY:22, styles:{fontSize:9} });
+    const y=doc.autoTable.previous.finalY+8; doc.setFontSize(12);
+    doc.text(`Total litri: ${totL.toFixed(2)}    Total cost: ${totE.toFixed(2)} €`,14,y);
+
     try{ doc.save(`alimentari_${yy}-${String(mm).padStart(2,'0')}.pdf`); }
     catch{ const blob=doc.output('blob'); const url=URL.createObjectURL(blob); window.open(url,'_blank'); }
   }catch(e){ console.error(e); alert('Nu pot genera PDF-ul (internet sau cache). Încearcă din nou.'); }
 });
 
-// ===== PWA SW =====
+// PWA SW
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js'); }); }
 
 // init
+function tick(){ const n=nowISO(); el('nowStamp').textContent=`${n.date} ${n.time}`; }
+setInterval(tick,1000); tick();
 refresh();
 </script>
 </body>
