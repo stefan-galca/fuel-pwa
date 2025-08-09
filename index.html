@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Consum L/100 km</title>
+<title>GSE International • Consum L/100 km</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#19c37d">
 <style>
@@ -20,10 +20,11 @@ th,td{border:1px solid #e5e7eb;padding:8px;text-align:center}
 th{background:#19c37d;color:#fff}
 .pill{display:inline-block;background:#ecfdf5;border:1px solid #19c37d;color:#065f46;border-radius:999px;padding:3px 8px;margin-right:6px}
 .muted{color:#6b7280;font-size:.9rem}
-.inline-btn{padding:6px 8px;border:1px solid #d1d5db;background:#fff;border-radius:8px;cursor:pointer}
+.inline-btn{padding:10px;border:1px solid #d1d5db;background:#fff;border-radius:10px;cursor:pointer}
 .ocr{background:#f0fdf4;border:1px dashed #10b981;border-radius:10px;padding:10px;margin-top:8px}
+.danger{border-color:#ef4444;color:#ef4444}
 </style>
-<!-- OCR -->
+<!-- OCR imagine -->
 <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
 <!-- PDF.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.13.216/pdf.min.js"></script>
@@ -32,35 +33,50 @@ th{background:#19c37d;color:#fff}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
-<header>Consum L/100 km</header>
+<header>GSE International • Consum L/100 km</header>
 <main>
 <div class="card">
-<div class="row"><div class="pill">Data curentă: <span id="nowStamp"></span></div></div>
-<div class="row">
-  <div><label>Odometer (km)<input type="text" id="odometer" inputmode="decimal" placeholder="km din bord"></label></div>
-  <div><label>Litri<input type="text" id="liters" inputmode="decimal" placeholder="ex: 300"></label></div>
-</div>
-<div class="row">
-  <div><label>Cost total (€) — opțional<input type="text" id="total_cost" inputmode="decimal"></label></div>
-  <div><label>Plin-plin?<input type="checkbox" id="full_tank"></label></div>
-</div>
-<div class="row"><div><label>Factura (poză sau PDF)<input type="file" id="invoice" accept="image/*,application/pdf"></label></div></div>
-<div id="detectBox" class="ocr" style="display:none">
-  <strong>Valori detectate</strong> — apasă pe butoane
-  <div id="detected" class="row"></div>
-</div>
-<div class="row" style="margin-top:8px">
-  <button id="addBtn">Adaugă</button>
-  <button id="exportCsvBtn">Export CSV</button>
-</div>
-<div class="row" style="margin-top:8px">
-  <div><label>Lună pentru export PDF<input type="month" id="monthPicker"></label></div>
-  <div style="align-self:end"><button id="exportPdfBtn" class="inline-btn">Export PDF (luna aleasă)</button></div>
-</div>
+  <div class="row"><div class="pill">Data curentă: <span id="nowStamp"></span></div></div>
+
+  <div class="row">
+    <div><label>Odometer (km)<input type="text" id="odometer" inputmode="decimal" placeholder="km din bord"></label></div>
+    <div><label>Litri<input type="text" id="liters" inputmode="decimal" placeholder="ex: 300"></label></div>
+  </div>
+  <div class="row">
+    <div><label>Cost total (€) — opțional<input type="text" id="total_cost" inputmode="decimal" placeholder="pune doar dacă vrei total pe lună"></label></div>
+    <div><label>Plin-plin?<input type="checkbox" id="full_tank"> <span class="muted">bifează doar când faci plinul</span></label></div>
+  </div>
+  <div class="row">
+    <div><label>Factura (poză sau PDF)<input type="file" id="invoice" accept="image/*,application/pdf"></label></div>
+  </div>
+
+  <div id="detectBox" class="ocr" style="display:none">
+    <strong>Valori detectate</strong> — apasă pe butoane
+    <div id="detected" class="row" style="margin-top:6px"></div>
+  </div>
+
+  <div class="row" style="margin-top:8px">
+    <button id="addBtn">Adaugă</button>
+    <button id="exportCsvBtn" class="inline-btn">Export CSV</button>
+    <button id="resetBtn" class="inline-btn danger">Resetează tot</button>
+  </div>
+
+  <div class="row" style="margin-top:8px">
+    <div><label>Lună pentru export PDF<input type="month" id="monthPicker"></label></div>
+    <div style="align-self:end"><button id="exportPdfBtn" class="inline-btn">Export PDF (luna aleasă)</button></div>
+  </div>
+
+  <div class="muted" style="margin-top:8px">
+    Datele rămân <b>doar pe telefonul tău</b> (localStorage). Nimic nu se trimite pe internet.
+  </div>
 </div>
 
 <div class="card">
-  <div><span class="pill" id="statFuel">0 L</span><span class="pill" id="statCost">0 €</span><span class="pill" id="statL100">— L/100 km</span></div>
+  <div>
+    <span class="pill" id="statFuel">0 L</span>
+    <span class="pill" id="statCost">0 €</span>
+    <span class="pill" id="statL100">— L/100 km</span>
+  </div>
 </div>
 
 <div class="card">
@@ -72,7 +88,7 @@ th{background:#19c37d;color:#fff}
 </main>
 
 <script>
-const KEY='fuel_entries_simple';
+const KEY='gse_fuel_entries';
 
 function nowISO(){const d=new Date();return{iso:d.toISOString(),date:d.toLocaleDateString('ro-RO'),time:d.toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'})};}
 function normalizeNumber(s){if(typeof s==='number')return s;if(!s)return NaN;let t=(''+s).replace(/[^0-9.,-]/g,'');if(t.includes(',')&&!t.includes('.'))t=t.replace(',','.');if((t.match(/[,\.]/g)||[]).length>1)t=t.replace(/[,.]/g,'');return parseFloat(t);}
@@ -83,13 +99,12 @@ function save(a){localStorage.setItem(KEY,JSON.stringify(a));}
 function computeRow(data,idx){
   const item=data[idx];
   let prevIndex=-1;
-  for(let i=idx-1;i>=0;i--)if(data[i].full_tank){prevIndex=i;break;}
+  for(let i=idx-1;i>=0;i--) if(data[i].full_tank){ prevIndex=i; break; }
   const prevOdo=prevIndex>=0?data[prevIndex].odometer:null;
   const km=(prevOdo!=null)?(item.odometer-prevOdo):null;
   const cons=(km&&km>0)?(item.liters/km*100):null;
   return {cons};
 }
-
 function fmt(n,d=2){return(n==null||isNaN(n))?'':Number(n).toFixed(d);}
 
 function refresh(){
@@ -99,8 +114,8 @@ function refresh(){
   data.forEach((it,i)=>{
     const r=computeRow(data,i);
     totalFuel+=it.liters||0;
-    if(it.total_cost)totalCost+=it.total_cost;
-    if(it.full_tank){if(lastFull!=null&&it.odometer>lastFull)totalKm+=(it.odometer-lastFull);lastFull=it.odometer;}
+    if(it.total_cost) totalCost+=it.total_cost;
+    if(it.full_tank){ if(lastFull!=null && it.odometer>lastFull) totalKm+=(it.odometer-lastFull); lastFull=it.odometer; }
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${it.date}</td><td>${it.time}</td><td>${it.odometer}</td><td>${fmt(it.liters,2)}</td><td>${fmt(it.total_cost,2)}</td><td>${it.full_tank?'✔':''}</td><td>${fmt(r.cons,2)}</td>`;
     tb.appendChild(tr);
@@ -115,85 +130,105 @@ function refresh(){
 el('addBtn').addEventListener('click',()=>{
   const odo=normalizeNumber(el('odometer').value);
   const lit=normalizeNumber(el('liters').value);
-  const total=normalizeNumber(el('total_cost').value);
+  const total=normalizeNumber(el('total_cost').value); // opțional
   const full=el('full_tank').checked;
-  if(isNaN(odo)||isNaN(lit)){alert('Completează Odometer și Litri.');return;}
+  if(isNaN(odo)||isNaN(lit)){ alert('Completează Odometer și Litri.'); return; }
   const ts=nowISO();
   const arr=load();
   arr.push({timestamp:ts.iso,date:ts.date,time:ts.time,odometer:odo,liters:lit,total_cost:total,full_tank:full});
   save(arr);
-  ['odometer','liters','total_cost','invoice'].forEach(id=>{const x=el(id);if(x)x.value='';});
+  ['odometer','liters','total_cost','invoice'].forEach(id=>{const x=el(id); if(x) x.value='';});
   el('full_tank').checked=false;
   refresh();
 });
 
-el('invoice').addEventListener('change',async()=>{
-  const f=el('invoice').files[0];if(!f)return;
-  el('detectBox').style.display='block';
-  el('detected').textContent='Analizez documentul...';
+// Reset total (șterge toate datele locale)
+el('resetBtn').addEventListener('click',()=>{
+  if(confirm('Ștergi toate înregistrările din aplicație?')){
+    localStorage.removeItem(KEY);
+    refresh();
+    alert('Gata. Aplicația a fost resetată (datele au fost șterse local).');
+  }
+});
+
+// OCR/PDF detect — sugerează Litri, Total €, Odo
+const detectBox=el('detectBox'), detected=el('detected');
+el('invoice').addEventListener('change', async ()=>{
+  const f=el('invoice').files[0]; if(!f) return;
+  detectBox.style.display='block'; detected.textContent='Analizez documentul...';
   try{
     if(f.type==='application/pdf'){
-      const text=await readPdfText(f);showSuggestions(text);
+      const text=await readPdfText(f); showSuggestions(text);
     }else if(f.type.startsWith('image/')){
       const url=await fileToDataURL(f);
-      const {data}=await Tesseract.recognize(url,'eng+ron');
+      const { data } = await Tesseract.recognize(url,'eng+ron');
       showSuggestions(data.text||'');
-    }else{el('detected').textContent='Tip fișier neacceptat.';}
-  }catch(e){el('detected').textContent='Eroare la citire.';}
+    }else{
+      detected.textContent='Tip fișier neacceptat.';
+    }
+  }catch(e){ console.error(e); detected.textContent='Eroare la citire.'; }
 });
 function fileToDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
 function fileToArrayBuffer(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsArrayBuffer(file);});}
 async function readPdfText(file){
   const buf=await fileToArrayBuffer(file);
   const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
-  let full='';for(let p=1;p<=pdf.numPages;p++){const pg=await pdf.getPage(p),c=await pg.getTextContent();full+=' '+c.items.map(i=>i.str).join(' ');}
+  let full=''; for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p), c=await pg.getTextContent(); full+=' '+c.items.map(i=>i.str).join(' '); }
   return full;
 }
 function showSuggestions(raw){
   const text=(raw||'').replace(/\s+/g,' ').toLowerCase();
-  const cand={liters:[],total:[],odo:[]},num=/\d+[\.,]\d+|\d+/g;
-  const asF=s=>{if(!s)return NaN;let t=s.replace(/[^0-9.,]/g,'');if(t.includes(',')&&!t.includes('.'))t=t.replace(',','.');if((t.match(/[,\.]/g)||[]).length>1)t=t.replace(/[.,]/g,'');return parseFloat(t);};
+  const cand={liters:[],total:[],odo:[]}, num=/\d+[\.,]\d+|\d+/g;
+  const asF=s=>{ if(!s) return NaN; let t=s.replace(/[^0-9.,]/g,''); if(t.includes(',')&&!t.includes('.')) t=t.replace(',','.'); if((t.match(/[,\.]/g)||[]).length>1) t=t.replace(/[.,]/g,''); return parseFloat(t); };
   const toks=text.split(/\s+/);
   for(let i=0;i<toks.length;i++){
-    if(toks[i].includes('lit')||toks[i].includes('cant'))for(let j=i+1;j<i+6&&j<toks.length;j++){const m=toks[j].match(num);if(m){const v=asF(m[0]);if(v>5&&v<2000)cand.liters.push(v);}}
-    if(toks[i].includes('total')||toks[i].includes('sum'))for(let j=i;j<i+6&&j<toks.length;j++){const m=toks[j].match(num);if(m){const v=asF(m[0]);if(v>10)cand.total.push(v);}}
-    if(toks[i].includes('km'))for(let j=i-2;j<i+3&&j<toks.length;j++){if(j<0)continue;const m=toks[j].match(num);if(m){const v=parseInt(m[0]);if(v>100&&v<3000000)cand.odo.push(v);}}
+    const w=toks[i];
+    if(w.includes('lit')||w.includes('cant')) for(let j=i+1;j<i+6&&j<toks.length;j++){ const m=toks[j].match(num); if(m){ const v=asF(m[0]); if(v>5&&v<2000) cand.liters.push(v); } }
+    if(w.includes('total')||w.includes('sum')||w.includes('amount')) for(let j=i;j<i+6&&j<toks.length;j++){ const m=toks[j].match(num); if(m){ const v=asF(m[0]); if(v>10) cand.total.push(v); } }
+    if(w.includes('km')||w.includes('odometer')||w.includes('odometru')) for(let j=i-2;j<i+3&&j<toks.length;j++){ if(j<0) continue; const m=toks[j].match(num); if(m){ const v=parseInt(m[0]); if(v>100&&v<3000000) cand.odo.push(v); } }
   }
   const uniq=a=>[...new Set(a)];
-  const sug={liters:uniq(cand.liters).pop(),total:uniq(cand.total).pop(),odo:uniq(cand.odo).pop()};
-  const btn=(lbl,val,id)=>isNaN(val)?'':`<button class="inline-btn" data-field="${id}" data-val="${val}">${lbl}: ${val}</button>`;
-  el('detected').innerHTML=[btn('Litri',sug.liters,'liters'),btn('Total €',sug.total,'total_cost'),btn('Odo',sug.odo,'odometer')].join(' ');
+  const sug={liters:uniq(cand.liters).pop(), total:uniq(cand.total).pop(), odo:uniq(cand.odo).pop()};
+  const btn=(lbl,val,id)=> (isNaN(val)?'':`<button class="inline-btn" data-field="${id}" data-val="${val}">${lbl}: ${val}</button>`);
+  detected.innerHTML = [ btn('Litri',sug.liters,'liters'), btn('Total €',sug.total,'total_cost'), btn('Odo',sug.odo,'odometer') ].join(' ');
 }
 document.getElementById('detected').addEventListener('click',e=>{
-  const b=e.target.closest('button[data-field]');if(!b)return;
-  const id=b.dataset.field,v=parseFloat(b.dataset.val),input=document.getElementById(id);
-  if(input)input.value=v;
+  const b=e.target.closest('button[data-field]'); if(!b) return;
+  const id=b.dataset.field, v=parseFloat(b.dataset.val), input=document.getElementById(id);
+  if(input) input.value=v;
 });
 
+// CSV
 el('exportCsvBtn').addEventListener('click',()=>{
   const header=['timestamp','date','time','odometer','liters','total_cost','full_tank'];
   const data=load().map(r=>[r.timestamp,r.date,r.time,r.odometer,r.liters,r.total_cost,r.full_tank?'yes':'']);
   const csv=[header.join(','),...data.map(a=>a.join(','))].join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='alimentari.csv';a.click();
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='alimentari.csv'; a.click();
 });
 
+// PDF pe lună
 el('exportPdfBtn').addEventListener('click',()=>{
-  const val=el('monthPicker').value;if(!val){alert('Alege o lună.');return;}
+  const val=el('monthPicker').value; if(!val){ alert('Alege o lună.'); return; }
   const [yy,mm]=val.split('-').map(x=>parseInt(x,10));
-  const rows=load().filter(r=>{const d=new Date(r.timestamp);return d.getFullYear()===yy&&(d.getMonth()+1)===mm;});
-  if(!rows.length){alert('Nu sunt date.');return;}
-  let totL=0,totE=0;rows.forEach(r=>{totL+=r.liters||0;if(r.total_cost)totE+=r.total_cost;});
-  const {jsPDF}=window.jspdf;const doc=new jsPDF();
-  doc.text(`Alimentări ${mm}/${yy}`,14,16);
+  const rows=load().filter(r=>{ const d=new Date(r.timestamp); return d.getFullYear()===yy && (d.getMonth()+1)===mm; });
+  if(!rows.length){ alert('Nu sunt date.'); return; }
+
+  let totL=0, totE=0; rows.forEach(r=>{ totL += (r.liters||0); if(r.total_cost) totE += r.total_cost; });
+
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF();
+  doc.setFontSize(14); doc.text(`GSE International — Alimentări ${mm}/${yy}`, 14, 16);
   const body=rows.map(r=>[r.date,r.time,r.odometer,r.liters,r.total_cost,r.full_tank?'✔':'']);
-  doc.autoTable({head:[['Data','Ora','Odo','Litri','Cost €','Plin']],body,startY:22});
+  doc.autoTable({ head:[['Data','Ora','Odo','Litri','Cost €','Plin']], body, startY:22, styles:{fontSize:9} });
   const y=doc.autoTable.previous.finalY+8;
-  doc.text(`Total litri: ${totL}   Total cost: ${totE} €`,14,y);
+  doc.setFontSize(12); doc.text(`Total litri: ${totL.toFixed(2)}    Total cost: ${totE.toFixed(2)} €`, 14, y);
   doc.save(`alimentari_${yy}-${String(mm).padStart(2,'0')}.pdf`);
 });
 
-setInterval(()=>{const n=nowISO();el('nowStamp').textContent=`${n.date} ${n.time}`;},1000);
-if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js');});}
+// ticker + SW
+setInterval(()=>{ const n=nowISO(); el('nowStamp').textContent=`${n.date} ${n.time}`; }, 1000);
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js'); }); }
+
 refresh();
 </script>
 </body>
